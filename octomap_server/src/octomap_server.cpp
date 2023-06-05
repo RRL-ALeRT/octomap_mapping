@@ -61,6 +61,8 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   using std::placeholders::_1;
   using std::placeholders::_2;
 
+  next_publish_time = get_clock()->now().seconds() + 5;
+
   world_frame_id_ = declare_parameter("frame_id", "map");
   base_frame_id_ = declare_parameter("base_frame_id", "base_footprint");
   use_height_map_ = declare_parameter("use_height_map", false);
@@ -872,7 +874,11 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
   }
 
   if (publish_binary_map) {
-    publishBinaryOctoMap(rostime);
+    if (get_clock()->now().seconds() > next_publish_time)
+    {
+      publishBinaryOctoMap(rostime);
+      next_publish_time += 5;
+    }
   }
 
   if (publish_full_map) {
@@ -1046,7 +1052,6 @@ void OctomapServer::filterGroundPlane(
       seg.segment(*inliers, *coefficients);
       if (inliers->indices.size() == 0) {
         RCLCPP_INFO(get_logger(), "PCL segmentation did not find any plane.");
-
         break;
       }
 

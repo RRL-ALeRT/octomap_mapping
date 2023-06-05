@@ -306,6 +306,8 @@ protected:
   unsigned multires_2d_scale_;
   bool project_complete_map_;
   bool use_colored_map_;
+
+  long int next_publish_time;
 };
 }  // namespace octomap_server
 
