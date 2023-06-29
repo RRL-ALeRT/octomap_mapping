@@ -61,7 +61,7 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   using std::placeholders::_1;
   using std::placeholders::_2;
 
-  next_publish_time = get_clock()->now().seconds() + 5;
+  next_publish_time = get_clock()->now().seconds() + 1;
 
   world_frame_id_ = declare_parameter("frame_id", "map");
   base_frame_id_ = declare_parameter("base_frame_id", "base_footprint");

@@ -11,7 +11,7 @@ def generate_launch_description():
             "frame_id": "map",
             "base_frame_id": "body",
             "sensor_model.max_range": 3.0,
-            "latch": False,
+            "latch": True,
         }],
         remappings=[
             ("cloud_in", "/velodyne_points"),
