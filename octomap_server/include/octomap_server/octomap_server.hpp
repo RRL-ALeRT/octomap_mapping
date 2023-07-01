@@ -210,6 +210,8 @@ protected:
 
   /// updates the downprojected 2D map as either occupied or free
   virtual void update2DMap(const OcTreeT::iterator & it, bool occupied);
+  virtual void update2DMap1m(const OcTreeT::iterator & it, bool occupied);
+  virtual void update2DMap2m(const OcTreeT::iterator & it, bool occupied);
 
   inline size_t mapIdx(const int i, const int j) const
   {
@@ -246,6 +248,8 @@ protected:
   rclcpp::Publisher<Octomap>::SharedPtr full_map_pub_;
   rclcpp::Publisher<PointCloud2>::SharedPtr point_cloud_pub_;
   rclcpp::Publisher<OccupancyGrid>::SharedPtr map_pub_;
+  rclcpp::Publisher<OccupancyGrid>::SharedPtr map_pub_1m_;
+  rclcpp::Publisher<OccupancyGrid>::SharedPtr map_pub_2m_;
   rclcpp::Publisher<MarkerArray>::SharedPtr fmarker_pub_;
   message_filters::Subscriber<PointCloud2> point_cloud_sub_;
   std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> tf_point_cloud_sub_;
@@ -271,6 +275,7 @@ protected:
 
   bool latched_topics_;
   bool publish_free_space_;
+  bool exploration_;
 
   double res_;
   size_t tree_depth_;
@@ -300,6 +305,8 @@ protected:
   // downprojected 2D map:
   bool incremental_2D_projection_;
   OccupancyGrid gridmap_;
+  OccupancyGrid gridmap_1m_;
+  OccupancyGrid gridmap_2m_;
   bool publish_2d_map_;
   bool map_origin_changed;
   octomap::OcTreeKey padded_min_key_;

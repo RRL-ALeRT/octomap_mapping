@@ -61,7 +61,8 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   using std::placeholders::_1;
   using std::placeholders::_2;
 
-  next_publish_time = get_clock()->now().seconds() + 1;
+  if (!has_parameter("exploration")) declare_parameter("exploration", exploration_);
+  get_parameter("exploration", exploration_);
 
   world_frame_id_ = declare_parameter("frame_id", "map");
   base_frame_id_ = declare_parameter("base_frame_id", "base_footprint");
@@ -300,6 +301,8 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   full_map_pub_ = create_publisher<Octomap>("octomap_full", qos);
   point_cloud_pub_ = create_publisher<PointCloud2>("octomap_point_cloud_centers", qos);
   map_pub_ = create_publisher<OccupancyGrid>("projected_map", qos.keep_last(5));
+  map_pub_1m_ = create_publisher<OccupancyGrid>("projected_map_1m", qos.keep_last(5));
+  map_pub_2m_ = create_publisher<OccupancyGrid>("projected_map_2m", qos.keep_last(5));
   fmarker_pub_ = create_publisher<MarkerArray>("free_cells_vis_array", qos);
 
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
@@ -661,7 +664,7 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
     full_map_pub_->get_subscription_count() +
     full_map_pub_->get_intra_process_subscription_count() > 0);
   publish_2d_map_ =
-    (latched_topics_ ||
+    (latched_topics_ || exploration_ ||
     map_pub_->get_subscription_count() +
     map_pub_->get_intra_process_subscription_count() > 0);
 
@@ -1229,6 +1232,18 @@ void OctomapServer::handlePreNodeTraversal(const rclcpp::Time & rostime)
           gridmap_.info.height);
         adjustMapData(gridmap_, old_map_info);
       }
+      if (mapChanged(old_map_info, gridmap_1m_.info)) {
+        RCLCPP_DEBUG(
+          get_logger(), "2D grid map 1m size changed to %dx%d", gridmap_1m_.info.width,
+          gridmap_1m_.info.height);
+        adjustMapData(gridmap_1m_, old_map_info);
+      }
+      if (mapChanged(old_map_info, gridmap_2m_.info)) {
+        RCLCPP_DEBUG(
+          get_logger(), "2D grid map 2m size changed to %dx%d", gridmap_2m_.info.width,
+          gridmap_2m_.info.height);
+        adjustMapData(gridmap_2m_, old_map_info);
+      }
       OccupancyGrid::_data_type::iterator startIt;
       size_t mapUpdateBBXmin_x =
         std::max(
@@ -1275,12 +1290,18 @@ void OctomapServer::handlePreNodeTraversal(const rclcpp::Time & rostime)
       }
     }
   }
+  gridmap_1m_ = gridmap_;
+  gridmap_1m_.header.frame_id = "map_1m";
+  gridmap_2m_ = gridmap_;
+  gridmap_2m_.header.frame_id = "map_2m";
 }
 
 void OctomapServer::handlePostNodeTraversal([[maybe_unused]] const rclcpp::Time & rostime)
 {
   if (publish_2d_map_) {
     map_pub_->publish(gridmap_);
+    map_pub_1m_->publish(gridmap_1m_);
+    map_pub_2m_->publish(gridmap_2m_);
   }
 }
 
@@ -1288,6 +1309,8 @@ void OctomapServer::handleOccupiedNode(const OcTreeT::iterator & it)
 {
   if (publish_2d_map_ && project_complete_map_) {
     update2DMap(it, true);
+    update2DMap1m(it, true);
+    update2DMap2m(it, true);
   }
 }
 
@@ -1295,6 +1318,8 @@ void OctomapServer::handleFreeNode(const OcTreeT::iterator & it)
 {
   if (publish_2d_map_ && project_complete_map_) {
     update2DMap(it, false);
+    update2DMap1m(it, false);
+    update2DMap2m(it, false);
   }
 }
 
@@ -1302,6 +1327,8 @@ void OctomapServer::handleOccupiedNodeInBBX(const OcTreeT::iterator & it)
 {
   if (publish_2d_map_ && project_complete_map_) {
     update2DMap(it, true);
+    update2DMap1m(it, true);
+    update2DMap2m(it, true);
   }
 }
 
@@ -1309,6 +1336,8 @@ void OctomapServer::handleFreeNodeInBBX(const OcTreeT::iterator & it)
 {
   if (publish_2d_map_ && project_complete_map_) {
     update2DMap(it, false);
+    update2DMap1m(it, false);
+    update2DMap2m(it, false);
   }
 }
 
@@ -1340,6 +1369,79 @@ void OctomapServer::update2DMap(const OcTreeT::iterator & it, bool occupied)
   }
 }
 
+void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
+{
+  // Check if the point's height is within the desired limits
+  double z_min = 0.8; // Modify this value to set the minimum height limit
+  double z_max = 1.2;  // Modify this value to set the maximum height limit
+  double z = it.getCoordinate().z();
+  if (z < z_min || z > z_max) {
+    // Point is outside the desired height limits, ignore it.
+    return;
+  }
+
+  // update 2D map (occupied always overrides):
+  if (it.getDepth() == max_tree_depth_) {
+    unsigned idx = mapIdx(it.getKey());
+    if (occupied) {
+      gridmap_1m_.data[mapIdx(it.getKey())] = 100;
+    } else if (gridmap_1m_.data[idx] == -1) {
+      gridmap_1m_.data[idx] = 0;
+    }
+
+  } else {
+    int int_size = 1 << (max_tree_depth_ - it.getDepth());
+    octomap::OcTreeKey min_key = it.getIndexKey();
+    for (int dx = 0; dx < int_size; dx++) {
+      int i = (min_key[0] + dx - padded_min_key_[0]) / multires_2d_scale_;
+      for (int dy = 0; dy < int_size; dy++) {
+        unsigned idx = mapIdx(i, (min_key[1] + dy - padded_min_key_[1]) / multires_2d_scale_);
+        if (occupied) {
+          gridmap_1m_.data[idx] = 100;
+        } else if (gridmap_1m_.data[idx] == -1) {
+          gridmap_1m_.data[idx] = 0;
+        }
+      }
+    }
+  }
+}
+
+void OctomapServer::update2DMap2m(const OcTreeT::iterator & it, bool occupied)
+{
+  // Check if the point's height is within the desired limits
+  double z_min = 1.8; // Modify this value to set the minimum height limit
+  double z_max = 2.2;  // Modify this value to set the maximum height limit
+  double z = it.getCoordinate().z();
+  if (z < z_min || z > z_max) {
+    // Point is outside the desired height limits, ignore it.
+    return;
+  }
+
+  // update 2D map (occupied always overrides):
+  if (it.getDepth() == max_tree_depth_) {
+    unsigned idx = mapIdx(it.getKey());
+    if (occupied) {
+      gridmap_2m_.data[mapIdx(it.getKey())] = 100;
+    } else if (gridmap_2m_.data[idx] == -1) {
+      gridmap_2m_.data[idx] = 0;
+    }
+
+  } else {
+    int int_size = 1 << (max_tree_depth_ - it.getDepth());
+    octomap::OcTreeKey min_key = it.getIndexKey();
+    for (int dx = 0; dx < int_size; dx++) {
+      int i = (min_key[0] + dx - padded_min_key_[0]) / multires_2d_scale_;
+      for (int dy = 0; dy < int_size; dy++) {
+        unsigned idx = mapIdx(i, (min_key[1] + dy - padded_min_key_[1]) / multires_2d_scale_);
+        if (occupied) {
+          gridmap_2m_.data[idx] = 100;
+        } else if (gridmap_2m_.data[idx] == -1) {
+          gridmap_2m_.data[idx] = 0;
+        }
+      }
+    }
+  }
+}
 
 bool OctomapServer::isSpeckleNode(const octomap::OcTreeKey & n_key) const
 {

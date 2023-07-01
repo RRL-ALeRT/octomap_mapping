@@ -20,4 +20,18 @@ def generate_launch_description():
         ],
     )
 
-    return LaunchDescription([octomap_server])
+    map_1m = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "1", "0", "0", "0", "map", "map_1m"],
+    )
+
+    map_2m = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "2", "0", "0", "0", "map", "map_2m"],
+    )
+
+    return LaunchDescription([octomap_server, map_1m, map_2m])
