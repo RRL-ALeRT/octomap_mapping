@@ -17,6 +17,8 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 find_package(OCTOMAP REQUIRED)
 
+find_package(Boost REQUIRED COMPONENTS date_time)
+
 ament_auto_add_library(octomap_server_static SHARED
   src/octomap_server_static.cpp
 )
