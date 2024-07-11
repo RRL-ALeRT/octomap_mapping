@@ -663,10 +663,10 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
     (latched_topics_ ||
     full_map_pub_->get_subscription_count() +
     full_map_pub_->get_intra_process_subscription_count() > 0);
-  publish_2d_map_ =
-    (latched_topics_ || exploration_ ||
-    map_pub_->get_subscription_count() +
-    map_pub_->get_intra_process_subscription_count() > 0);
+  publish_2d_map_ = true;
+    // (latched_topics_ || exploration_ ||
+    // map_pub_->get_subscription_count() +
+    // map_pub_->get_intra_process_subscription_count() > 0);
 
   // init markers for free space:
   MarkerArray free_nodes_vis;
@@ -1372,8 +1372,8 @@ void OctomapServer::update2DMap(const OcTreeT::iterator & it, bool occupied)
 void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
 {
   // Check if the point's height is within the desired limits
-  double z_min = 0.8; // Modify this value to set the minimum height limit
-  double z_max = 1.2;  // Modify this value to set the maximum height limit
+  double z_min = 0.7; // Modify this value to set the minimum height limit
+  double z_max = 1.3;  // Modify this value to set the maximum height limit
   double z = it.getCoordinate().z();
   if (z < z_min || z > z_max) {
     // Point is outside the desired height limits, ignore it.
