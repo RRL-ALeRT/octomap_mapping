@@ -252,7 +252,13 @@ protected:
   rclcpp::Publisher<OccupancyGrid>::SharedPtr map_pub_2m_;
   rclcpp::Publisher<MarkerArray>::SharedPtr fmarker_pub_;
   message_filters::Subscriber<PointCloud2> point_cloud_sub_;
+  message_filters::Subscriber<PointCloud2> point_cloud_1_sub_;
+  message_filters::Subscriber<PointCloud2> point_cloud_2_sub_;
+  message_filters::Subscriber<PointCloud2> point_cloud_3_sub_;
   std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> tf_point_cloud_sub_;
+  std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> tf_point_cloud_1_sub_;
+  std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> tf_point_cloud_2_sub_;
+  std::shared_ptr<tf2_ros::MessageFilter<PointCloud2>> tf_point_cloud_3_sub_;
   rclcpp::Service<OctomapSrv>::SharedPtr octomap_binary_srv_;
   rclcpp::Service<OctomapSrv>::SharedPtr octomap_full_srv_;
   rclcpp::Service<BBoxSrv>::SharedPtr clear_bbox_srv_;
