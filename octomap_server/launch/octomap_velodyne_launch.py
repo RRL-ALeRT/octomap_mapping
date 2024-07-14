@@ -98,9 +98,9 @@ def generate_launch_description():
             "multiple_pointclouds": True,
         }],
         remappings=[
-            ("/navigation/cloud_in", "/depth/frontleft/points"),
-            ("/navigation/cloud_in", "/depth/frontright/points"),
-            ("/navigation/cloud_in", "/depth/back/points"),
+            ("/navigation/cloud_in_1", "/depth/frontleft/points"),
+            ("/navigation/cloud_in_2", "/depth/frontright/points"),
+            ("/navigation/cloud_in_3", "/depth/back/points"),
         ],
     )
     node_list.append(octomap_nav_server)
@@ -139,25 +139,6 @@ def generate_launch_description():
             output='screen',
         )
     node_list.append(spotfront_pointcloud)
-
-    # spotfront_filtering_container = ComposableNodeContainer(
-    #     name='realsense_pointcloud_filter',
-    #     package='rclcpp_components',
-    #     executable='component_container',
-    #     namespace='',
-    #     composable_node_descriptions=[
-    #         ComposableNode(
-    #             package='rrl_launchers',
-    #             plugin='rrl_launchers::FilteredPointCloud',
-    #             name='filter_pcl',
-    #             remappings=[
-    #                 ("/velodyne_points", "/navigation/octomap_point_cloud_centers"),
-    #                 ("/filtered_velodyne_points", "/navigation/octomap_point_cloud_centers_filtered"),
-    #             ],
-    #         )
-    #     ],
-    #     output='both',
-    # )
 
     return LaunchDescription(node_list)
 
