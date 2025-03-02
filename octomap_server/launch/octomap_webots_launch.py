@@ -16,7 +16,8 @@ def generate_launch_description():
             "resolution": 0.05,
             "frame_id": "map",
             "base_frame_id": "base_link",
-            "sensor_model.max_range": 1.2,
+            "sensor_model.max_range": 3.0,
+            "filter_ground" : True,
             "latch": False,
             "exploration": True,
             "multiple_pointclouds": True,
@@ -25,7 +26,10 @@ def generate_launch_description():
         remappings=[
             ("cloud_in_1", "/Spot/left_head_depth/point_cloud"),
             ("cloud_in_2", "/Spot/right_head_depth/point_cloud"),
-            # ("cloud_in_3", "/Spot/rear_depth/point_cloud"),
+            ("cloud_in_3", "/Spot/rear_depth/point_cloud"),
+            ("cloud_in_4", "/Spot/left_flank_depth/point_cloud"),
+            ("cloud_in_5", "/Spot/right_flank_depth/point_cloud"),
+            ("cloud_in_6", "/Spot/Velodyne_Puck/point_cloud")
         ],
     )
     node_list.append(octomap_server)
@@ -77,6 +81,22 @@ def generate_launch_description():
         arguments=["0", "0", "0", "0", "0", "0", "rear depth", "rear_depth"],
     )
     node_list.append(rd)
+
+    rfd = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "0", "0", "0", "0", "right flank depth", "right_flank_depth"],
+    )
+    node_list.append(rfd)
+
+    lfd = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "0", "0", "0", "0", "left flank depth", "left_flank_depth"],
+    )
+    node_list.append(lfd)
 
     body_base_link = Node(
         package="tf2_ros",
