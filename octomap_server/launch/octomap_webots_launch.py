@@ -13,7 +13,7 @@ def generate_launch_description():
         executable='octomap_server_node',
         output='screen',
         parameters=[{
-            "resolution": 0.05,
+            "resolution": 0.1,
             "frame_id": "map",
             "base_frame_id": "base_link",
             "sensor_model.max_range": 3.0,
