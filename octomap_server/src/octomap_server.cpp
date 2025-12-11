@@ -33,10 +33,10 @@
 #include <memory>
 #include <string>
 #include <vector>
-
+#include <chrono>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-
+using namespace std::literals::chrono_literals;
 namespace
 {
 template<typename T>
@@ -54,7 +54,10 @@ bool update_param(const std::vector<rclcpp::Parameter> & p, const std::string & 
 }
 }  // namespace
 namespace octomap_server
+
 {
+//testing code
+
 OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
 : Node("octomap_server", node_options)
 {
@@ -305,6 +308,9 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   map_pub_2m_ = create_publisher<OccupancyGrid>("projected_map_2m", qos.keep_last(5));
   fmarker_pub_ = create_publisher<MarkerArray>("free_cells_vis_array", qos);
 
+  //timer for making a local octomap:
+  timer_ = create_wall_timer(1000ms, std::bind(&OctomapServer::timer_callback, this));
+
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
     this->get_node_base_interface(),
@@ -375,6 +381,43 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   if (!openFile(filename)) {
     RCLCPP_WARN(get_logger(), "Could not open file %s", filename.c_str());
   }
+}
+
+void OctomapServer::timer_callback()
+{
+  RCLCPP_INFO(rclcpp::get_logger("octomap_server"), "test");
+  octomap::OcTreeNode* root = octree_->getRoot();
+  double debugPosX = 0;
+  double debugPosY = 0;
+  try {
+    // wait up to 1s for transform (optional)
+    geometry_msgs::msg::TransformStamped transform =
+      tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero, std::chrono::seconds(1));
+    debugPosX = transform.transform.translation.x;
+    debugPosY = transform.transform.translation.y;
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_ERROR(rclcpp::get_logger("octomap_server"), "Failed to get transform: %s", ex.what());
+  }
+
+  for(auto it = octree_->begin(); it != octree_->end();++it)
+  {
+    double x = it.getX();
+    double y = it.getY();
+    double z = it.getZ();
+    octomap::point3d coord = it.getCoordinate();
+    double dist = abs(debugPosX - x) + abs(debugPosY - y);
+    if(dist > 3)
+    {
+      octree_->deleteNode(x, y, z);
+      //it = octree_->begin();
+    }
+    else
+    {
+      //++it;
+    }
+  }
+  octree_->updateInnerOccupancy();
+  octree_->prune();
 }
 
 bool OctomapServer::openFile(const std::string & filename)

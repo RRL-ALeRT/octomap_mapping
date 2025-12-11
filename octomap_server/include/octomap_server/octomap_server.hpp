@@ -121,7 +121,8 @@ public:
 
   virtual void insertCloudCallback(const PointCloud2::ConstSharedPtr cloud);
   virtual bool openFile(const std::string & filename);
-
+  rclcpp::TimerBase::SharedPtr timer_; 
+  void timer_callback();
 protected:
   inline static void updateMinKey(const octomap::OcTreeKey & in, octomap::OcTreeKey & min)
   {
