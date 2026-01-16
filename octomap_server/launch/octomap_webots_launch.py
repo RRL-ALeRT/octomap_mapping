@@ -31,6 +31,7 @@ def generate_launch_description():
             ("cloud_in_5", "/Spot/right_flank_depth/point_cloud"),
             ("cloud_in_6", "/Spot/Velodyne_Puck/point_cloud"),
             ("octomap_full", "/navigation/octomap_full"),
+            ("octomap_binary", "/navigation/octomap_binary"),
             ("octomap_point_cloud_centers", "/navigation/octomap_point_cloud_centers")
         ],
     )
