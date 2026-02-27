@@ -302,6 +302,8 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   marker_pub_ = create_publisher<MarkerArray>("occupied_cells_vis_array", qos);
   binary_map_pub_ = create_publisher<Octomap>("octomap_binary", qos);
   full_map_pub_ = create_publisher<Octomap>("octomap_full", qos);
+  binary_map_local_pub_ = create_publisher<Octomap>("octomap_binary_local", qos);
+  full_map_local_pub_ = create_publisher<Octomap>("octomap_full_local", qos);
   point_cloud_pub_ = create_publisher<PointCloud2>("octomap_point_cloud_centers", qos);
   map_pub_ = create_publisher<OccupancyGrid>("projected_map", qos.keep_last(5));
   map_pub_1m_ = create_publisher<OccupancyGrid>("projected_map_1m", qos.keep_last(5));
@@ -309,6 +311,7 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   fmarker_pub_ = create_publisher<MarkerArray>("free_cells_vis_array", qos);
 
   //timer for making a local octomap:
+  local_map_radius_ = declare_parameter("local_map_radius", 3.0);
   timer_ = create_wall_timer(1000ms, std::bind(&OctomapServer::timer_callback, this));
 
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
@@ -385,39 +388,82 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
 
 void OctomapServer::timer_callback()
 {
-  RCLCPP_INFO(rclcpp::get_logger("octomap_server"), "test");
-  octomap::OcTreeNode* root = octree_->getRoot();
-  double debugPosX = 0;
-  double debugPosY = 0;
-  try {
-    // wait up to 1s for transform (optional)
-    geometry_msgs::msg::TransformStamped transform =
-      tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero, std::chrono::seconds(1));
-    debugPosX = transform.transform.translation.x;
-    debugPosY = transform.transform.translation.y;
-  } catch (const tf2::TransformException & ex) {
-    RCLCPP_ERROR(rclcpp::get_logger("octomap_server"), "Failed to get transform: %s", ex.what());
+  // Skip if nobody is listening on local topics
+  const bool has_binary_subs = binary_map_local_pub_->get_subscription_count() +
+    binary_map_local_pub_->get_intra_process_subscription_count() > 0;
+  const bool has_full_subs = full_map_local_pub_->get_subscription_count() +
+    full_map_local_pub_->get_intra_process_subscription_count() > 0;
+  if (!has_binary_subs && !has_full_subs) {
+    return;
   }
 
-  for(auto it = octree_->begin(); it != octree_->end();++it)
+  if (octree_->size() <= 1) {
+    return;
+  }
+
+  // Get robot position
+  double robot_x = 0.0;
+  double robot_y = 0.0;
+  try {
+    geometry_msgs::msg::TransformStamped transform =
+      tf2_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero, std::chrono::seconds(1));
+    robot_x = transform.transform.translation.x;
+    robot_y = transform.transform.translation.y;
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_ERROR(get_logger(), "Local map: failed to get transform: %s", ex.what());
+    return;
+  }
+
+  const auto start_time = rclcpp::Clock{}.now();
+
+  // Build a temporary local octree by using BBX iteration (fast: skips branches outside the box)
+  const double r = local_map_radius_;
+  octomap::point3d bbx_min(robot_x - r, robot_y - r, -100.0);
+  octomap::point3d bbx_max(robot_x + r, robot_y + r, 100.0);
+
+  OcTreeT local_tree(octree_->getResolution());
+
+  for (auto it = octree_->begin_leafs_bbx(bbx_min, bbx_max),
+    end = octree_->end_leafs_bbx(); it != end; ++it)
   {
-    double x = it.getX();
-    double y = it.getY();
-    double z = it.getZ();
-    octomap::point3d coord = it.getCoordinate();
-    double dist = abs(debugPosX - x) + abs(debugPosY - y);
-    if(dist > 3)
-    {
-      octree_->deleteNode(x, y, z);
-      //it = octree_->begin();
-    }
-    else
-    {
-      //++it;
+    // Manhattan distance check for tighter circle-like bound
+    const double dx = std::abs(robot_x - it.getX());
+    const double dy = std::abs(robot_y - it.getY());
+    if (dx + dy <= r) {
+      local_tree.updateNode(it.getCoordinate(), it->getLogOdds());
     }
   }
-  octree_->updateInnerOccupancy();
-  octree_->prune();
+  local_tree.updateInnerOccupancy();
+  local_tree.prune();
+
+  const auto rostime = now();
+
+  // Publish local binary map
+  if (has_binary_subs) {
+    Octomap map;
+    map.header.frame_id = world_frame_id_;
+    map.header.stamp = rostime;
+    if (octomap_msgs::binaryMapToMsg(local_tree, map)) {
+      binary_map_local_pub_->publish(map);
+    } else {
+      RCLCPP_ERROR(get_logger(), "Error serializing local binary OctoMap");
+    }
+  }
+
+  // Publish local full map
+  if (has_full_subs) {
+    Octomap map;
+    map.header.frame_id = world_frame_id_;
+    map.header.stamp = rostime;
+    if (octomap_msgs::fullMapToMsg(local_tree, map)) {
+      full_map_local_pub_->publish(map);
+    } else {
+      RCLCPP_ERROR(get_logger(), "Error serializing local full OctoMap");
+    }
+  }
+
+  double elapsed = (rclcpp::Clock{}.now() - start_time).seconds();
+  RCLCPP_DEBUG(get_logger(), "Local map published in %f sec", elapsed);
 }
 
 bool OctomapServer::openFile(const std::string & filename)

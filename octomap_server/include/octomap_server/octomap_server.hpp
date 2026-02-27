@@ -247,6 +247,8 @@ protected:
   rclcpp::Publisher<MarkerArray>::SharedPtr marker_pub_;
   rclcpp::Publisher<Octomap>::SharedPtr binary_map_pub_;
   rclcpp::Publisher<Octomap>::SharedPtr full_map_pub_;
+  rclcpp::Publisher<Octomap>::SharedPtr binary_map_local_pub_;
+  rclcpp::Publisher<Octomap>::SharedPtr full_map_local_pub_;
   rclcpp::Publisher<PointCloud2>::SharedPtr point_cloud_pub_;
   rclcpp::Publisher<OccupancyGrid>::SharedPtr map_pub_;
   rclcpp::Publisher<OccupancyGrid>::SharedPtr map_pub_1m_;
@@ -326,6 +328,7 @@ protected:
   bool use_colored_map_;
 
   long int next_publish_time;
+  double local_map_radius_;
 };
 }  // namespace octomap_server
 
