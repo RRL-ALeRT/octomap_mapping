@@ -321,6 +321,9 @@ protected:
   bool use_colored_map_;
 
   long int next_publish_time;
+
+private:
+  double min_range_;  // Minimum sensor range
 };
 }  // namespace octomap_server
 

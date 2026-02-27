@@ -173,6 +173,14 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
     max_range_ = declare_parameter("sensor_model.max_range", -1.0, max_range_desc);
   }
 
+  rcl_interfaces::msg::ParameterDescriptor min_range_desc;
+  min_range_desc.description = "Sensor minimum range";
+  rcl_interfaces::msg::FloatingPointRange min_range_range;
+  min_range_range.from_value = 0.0;
+  min_range_range.to_value = 100.0;
+  min_range_desc.floating_point_range.push_back(min_range_range);
+  min_range_ = declare_parameter("sensor_model.min_range", 0.0, min_range_desc);
+
   res_ = declare_parameter("resolution", 0.05);
 
   rcl_interfaces::msg::ParameterDescriptor prob_hit_desc;
@@ -571,6 +579,9 @@ void OctomapServer::insertScan(
     octomap::point3d point(it->x, it->y, it->z);
     // maxrange check
     if ((max_range_ < 0.0) || ((point - sensor_origin).norm() <= max_range_) ) {
+      if ((point - sensor_origin).norm() < min_range_) {
+        continue;  // Skip points closer than the minimum range
+      }
       // free cells
       if (octree_->computeRayKeys(sensor_origin, point, key_ray_)) {
         free_cells.insert(key_ray_.begin(), key_ray_.end());
@@ -1397,8 +1408,8 @@ void OctomapServer::update2DMap(const OcTreeT::iterator & it, bool occupied)
 void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
 {
   // Check if the point's height is within the desired limits
-  double z_min = 0.7; // Modify this value to set the minimum height limit
-  double z_max = 1.3;  // Modify this value to set the maximum height limit
+  double z_min = 0.3; // Modify this value to set the minimum height limit
+  double z_max = 1.0;  // Modify this value to set the maximum height limit
   double z = it.getCoordinate().z();
   if (z < z_min || z > z_max) {
     // Point is outside the desired height limits, ignore it.
@@ -1507,6 +1518,7 @@ rcl_interfaces::msg::SetParametersResult OctomapServer::onParameter(
   update_param(parameters, "ground_filter_angle", ground_filter_angle_);
   update_param(parameters, "ground_filter_plane_distance", ground_filter_plane_distance_);
   update_param(parameters, "sensor_model.max_range", max_range_);
+  update_param(parameters, "sensor_model.min_range", min_range_);
   double sensor_model_min{get_parameter("sensor_model.min").as_double()};
   update_param(parameters, "sensor_model.min", sensor_model_min);
   octree_->setClampingThresMin(sensor_model_min);

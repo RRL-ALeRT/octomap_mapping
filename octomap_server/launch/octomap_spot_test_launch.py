@@ -14,8 +14,8 @@ def generate_launch_description():
         output="screen",
         arguments=["0", "0", "0", "0", "0", "0", "vision", "map"],
     )
-
     node_list.append(map_odom)
+
     map_1m = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -38,7 +38,7 @@ def generate_launch_description():
         namespace='navigation',
         output='screen',
         parameters=[{
-            "resolution": 0.1,
+            "resolution": 0.05,
             "frame_id": "map",
             "base_frame_id": "body",
             "sensor_model.max_range": 2.5,
@@ -62,26 +62,43 @@ def generate_launch_description():
                     package='depth_image_proc',
                     plugin='depth_image_proc::PointCloudXyzNode',
                     name='point_cloud_xyz_node',
-                    remappings=[('image_rect', '/depth/frontleft/image'),
-                                ('camera_info', '/depth/frontleft/camera_info'),
+                    remappings=[('image_rect', '/depth_registered/frontleft/image'),
+                                ('camera_info', '/depth_registered/frontleft/camera_info'),
                                 ('points', '/spot_depth_points')]
                 ),
                 ComposableNode(
                     package='depth_image_proc',
                     plugin='depth_image_proc::PointCloudXyzNode',
                     name='point_cloud_xyz_node',
-                    remappings=[('image_rect', '/depth/frontright/image'),
-                                ('camera_info', '/depth/frontright/camera_info'),
+                    remappings=[('image_rect', '/depth_registered/frontright/image'),
+                                ('camera_info', '/depth_registered/frontright/camera_info'),
                                 ('points', '/spot_depth_points')]
                 ),
+                # ComposableNode(
+                #     package='depth_image_proc',
+                #     plugin='depth_image_proc::PointCloudXyzNode',
+                #     name='point_cloud_xyz_node',
+                #     remappings=[('image_rect', '/depth_registered/left/image'),
+                #                 ('camera_info', '/depth_registered/left/camera_info'),
+                #                 ('points', '/spot_depth_points')]
+                # ),
+                # ComposableNode(
+                #     package='depth_image_proc',
+                #     plugin='depth_image_proc::PointCloudXyzNode',
+                #     name='point_cloud_xyz_node',
+                #     remappings=[('image_rect', '/depth_registered/right/image'),
+                #                 ('camera_info', '/depth_registered/right/camera_info'),
+                #                 ('points', '/spot_depth_points')]
+                # ),
                 ComposableNode(
                     package='depth_image_proc',
                     plugin='depth_image_proc::PointCloudXyzNode',
                     name='point_cloud_xyz_node',
-                    remappings=[('image_rect', '/depth/back/image'),
-                                ('camera_info', '/depth/back/camera_info'),
+                    remappings=[('image_rect', '/depth_registered/back/image'),
+                                ('camera_info', '/depth_registered/back/camera_info'),
                                 ('points', '/spot_depth_points')]
                 ),
+                
             ],
             output='screen',
         )

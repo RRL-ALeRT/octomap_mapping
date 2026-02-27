@@ -8,80 +8,13 @@ from launch_ros.descriptions import ComposableNode
 def generate_launch_description():
     node_list = []
 
-    realsenses_filtering_container = ComposableNodeContainer(
-        name='realsense_pointcloud_filter',
-        package='rclcpp_components',
-        executable='component_container',
-        namespace='',
-        composable_node_descriptions=[
-            ComposableNode(
-                package='rrl_launchers',
-                plugin='rrl_launchers::FilteredPointCloud',
-                name='filter_pcl',
-                remappings=[
-                    ("/points", "/rs_front/depth/color/points"),
-                    ("/filtered_points", "/rs_front/depth/color/points_filtered"),
-                ],
-            ),
-            ComposableNode(
-                package='rrl_launchers',
-                plugin='rrl_launchers::FilteredPointCloud',
-                name='filter_pcl',
-                remappings=[
-                    ("/points", "/rs_left/depth/color/points"),
-                    ("/filtered_points", "/rs_left/depth/color/points_filtered"),
-                ],
-            ),
-            ComposableNode(
-                package='rrl_launchers',
-                plugin='rrl_launchers::FilteredPointCloud',
-                name='filter_pcl',
-                remappings=[
-                    ("/points", "/rs_right/depth/color/points"),
-                    ("/filtered_points", "/rs_right/depth/color/points_filtered"),
-                ],
-            )
-        ],
-        output='both',
+    map_odom = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "0", "0", "0", "0", "vision", "map"],
     )
-    node_list.append(realsenses_filtering_container)
-
-    rs_front_relay = ExecuteProcess(
-        cmd=['ros2', 'run', 'topic_tools', 'relay', '/rs_front/depth/color/points_filtered', '/rs_combined_filtered'],
-        output='screen'
-    )
-    node_list.append(rs_front_relay)
-
-    rs_left_relay = ExecuteProcess(
-        cmd=['ros2', 'run', 'topic_tools', 'relay', '/rs_left/depth/color/points_filtered', '/rs_combined_filtered'],
-        output='screen'
-    )
-    node_list.append(rs_left_relay)
-
-    rs_right_relay = ExecuteProcess(
-        cmd=['ros2', 'run', 'topic_tools', 'relay', '/rs_right/depth/color/points_filtered', '/rs_combined_filtered'],
-        output='screen'
-    )
-    node_list.append(rs_right_relay)
-
-    octomap_server = Node(
-        package='octomap_server',
-        executable='octomap_server_node',
-        output='screen',
-        parameters=[{
-            "resolution": 0.05,
-            "frame_id": "map",
-            "base_frame_id": "body",
-            "sensor_model.max_range": 2.0,
-            "latch": False,
-            "exploration": True,
-            "multiple_pointclouds": False,
-        }],
-        remappings=[
-            ("cloud_in", "/rs_combined_filtered"),
-        ],
-    )
-    node_list.append(octomap_server)
+    node_list.append(map_odom)
 
     map_1m = Node(
         package="tf2_ros",
@@ -99,80 +32,91 @@ def generate_launch_description():
     )
     node_list.append(map_2m)
 
-    # octomap_nav_server = Node(
-    #     package='octomap_server',
-    #     executable='octomap_server_node',
-    #     namespace='navigation',
-    #     output='screen',
-    #     parameters=[{
-    #         "resolution": 0.05,
-    #         "frame_id": "map",
-    #         "base_frame_id": "body",
-    #         "sensor_model.max_range": 1.2,
-    #         "latch": False,
-    #         "exploration": False,
-    #         "multiple_pointclouds": False,
-    #     }],
-    #     remappings=[
-    #         ("/navigation/cloud_in", "/spot_depth_points"),
-    #     ],
-    # )
-    # node_list.append(octomap_nav_server)
+    octomap_nav_server = Node(
+        package='octomap_server',
+        executable='octomap_server_node',
+        namespace='navigation',
+        output='screen',
+        parameters=[{
+            "resolution": 0.05,
+            "frame_id": "map",
+            "base_frame_id": "body",
+            "sensor_model.max_range": 2.5,
+            "latch": False,
+            "exploration": False,
+            "multiple_pointclouds": False,
+        }],
+        remappings=[
+            ("/navigation/cloud_in", "/rs_depth_points"),
+        ],
+    )
+    node_list.append(octomap_nav_server)
 
-    # spot_pointcloud = ComposableNodeContainer(
-    #         name='container',
-    #         namespace='',
-    #         package='rclcpp_components',
-    #         executable='component_container',
-    #         composable_node_descriptions=[
-    #             ComposableNode(
-    #                 package='depth_image_proc',
-    #                 plugin='depth_image_proc::PointCloudXyzNode',
-    #                 name='point_cloud_xyz_node',
-    #                 remappings=[('image_rect', '/depth/frontleft/image'),
-    #                             ('camera_info', '/depth/frontleft/camera_info'),
-    #                             ('points', '/spot_depth_points')]
-    #             ),
-    #             ComposableNode(
-    #                 package='depth_image_proc',
-    #                 plugin='depth_image_proc::PointCloudXyzNode',
-    #                 name='point_cloud_xyz_node',
-    #                 remappings=[('image_rect', '/depth/frontright/image'),
-    #                             ('camera_info', '/depth/frontright/camera_info'),
-    #                             ('points', '/spot_depth_points')]
-    #             ),
-    #             ComposableNode(
-    #                 package='depth_image_proc',
-    #                 plugin='depth_image_proc::PointCloudXyzNode',
-    #                 name='point_cloud_xyz_node',
-    #                 remappings=[('image_rect', '/depth/back/image'),
-    #                             ('camera_info', '/depth/back/camera_info'),
-    #                             ('points', '/spot_depth_points')]
-    #             ),
-    #         ],
-    #         output='screen',
-    #     )
-    # node_list.append(spot_pointcloud)
+    rs_pointcloud = ComposableNodeContainer(
+            name='container',
+            namespace='',
+            package='rclcpp_components',
+            executable='component_container',
+            composable_node_descriptions=[
+                ComposableNode(
+                    package='depth_image_proc',
+                    plugin='depth_image_proc::PointCloudXyzNode',
+                    name='point_cloud_xyz_node',
+                    namespace='rs_right',
+                    remappings=[
+                        ('image_rect', '/rs_right/camera/depth/image_rect_raw'),
+                        ('camera_info', '/rs_right/camera/depth/camera_info'),
+                        ('points', '/rs_depth_points')
+                    ]
+                ),
+                ComposableNode(
+                    package='depth_image_proc',
+                    plugin='depth_image_proc::PointCloudXyzNode',
+                    name='point_cloud_xyz_node',
+                    namespace='rs_left',
+                    remappings=[
+                        ('image_rect', '/rs_left/camera/depth/image_rect_raw'),
+                        ('camera_info', '/rs_left/camera/depth/camera_info'),
+                        ('points', '/rs_depth_points')
+                    ]
+                ),
+                ComposableNode(
+                    package='depth_image_proc',
+                    plugin='depth_image_proc::PointCloudXyzNode',
+                    name='point_cloud_xyz_node',
+                    namespace='rs_front',
+                    remappings=[
+                        ('image_rect', '/rs_front/camera/depth/image_rect_raw'),
+                        ('camera_info', '/rs_front/camera/depth/camera_info'),
+                        ('points', '/rs_depth_points')
+                    ]
+                ),
+                
+            ],
+            output='screen',
+        )
+    node_list.append(rs_pointcloud)
 
-    # octomap_filtering_container = ComposableNodeContainer(
-    #     name='octomap_pointcloud_filter',
-    #     package='rclcpp_components',
-    #     executable='component_container',
-    #     namespace='',
-    #     composable_node_descriptions=[
-    #         ComposableNode(
-    #             package='rrl_launchers',
-    #             plugin='rrl_launchers::FilteredPointCloud',
-    #             name='filter_pcl',
-    #             remappings=[
-    #                 ("/points", "/navigation/octomap_point_cloud_centers"),
-    #                 ("/filtered_points", "/navigation/octomap_point_cloud_centers_filtered"),
-    #             ],
-    #         ),
-    #     ],
-    #     output='both',
-    # )
-    # node_list.append(octomap_filtering_container)
+    octomap_filtering_container = ComposableNodeContainer(
+        name='octomap_pointcloud_filter',
+        package='rclcpp_components',
+        executable='component_container',
+        namespace='',
+        composable_node_descriptions=[
+            ComposableNode(
+                package='rrl_launchers',
+                plugin='rrl_launchers::FilteredPointCloud',
+                name='filter_pcl',
+                remappings=[
+                    ("/points", "/navigation/octomap_point_cloud_centers"),
+                    ("/filtered_points", "/navigation/octomap_point_cloud_centers_filtered"),
+                ],
+            ),
+        ],
+        output='both',
+    )
+
+    node_list.append(octomap_filtering_container)
 
     return LaunchDescription(node_list)
 
