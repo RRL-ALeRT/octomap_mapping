@@ -28,14 +28,14 @@
 
 #include <octomap_server/octomap_server.hpp>
 
-#include <tf2_eigen/tf2_eigen.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-
 #include <algorithm>
 #include <limits>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace
 {
@@ -337,21 +337,33 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
     point_cloud_1_sub_.subscribe(this, "cloud_in_1", rmw_qos_profile_sensor_data);
     point_cloud_2_sub_.subscribe(this, "cloud_in_2", rmw_qos_profile_sensor_data);
     point_cloud_3_sub_.subscribe(this, "cloud_in_3", rmw_qos_profile_sensor_data);
-    
+    point_cloud_4_sub_.subscribe(this, "cloud_in_4", rmw_qos_profile_sensor_data);
+    point_cloud_5_sub_.subscribe(this, "cloud_in_5", rmw_qos_profile_sensor_data);
+
     tf_point_cloud_1_sub_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
       point_cloud_1_sub_, *tf2_buffer_, world_frame_id_, 1, this->get_node_logging_interface(),
       this->get_node_clock_interface(), 5s);
     tf_point_cloud_1_sub_->registerCallback(&OctomapServer::insertCloudCallback, this);
-    
+
     tf_point_cloud_2_sub_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
       point_cloud_2_sub_, *tf2_buffer_, world_frame_id_, 1, this->get_node_logging_interface(),
       this->get_node_clock_interface(), 5s);
     tf_point_cloud_2_sub_->registerCallback(&OctomapServer::insertCloudCallback, this);
-    
+
     tf_point_cloud_3_sub_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
       point_cloud_3_sub_, *tf2_buffer_, world_frame_id_, 1, this->get_node_logging_interface(),
       this->get_node_clock_interface(), 5s);
     tf_point_cloud_3_sub_->registerCallback(&OctomapServer::insertCloudCallback, this);
+
+    tf_point_cloud_4_sub_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
+      point_cloud_4_sub_, *tf2_buffer_, world_frame_id_, 1, this->get_node_logging_interface(),
+      this->get_node_clock_interface(), 5s);
+    tf_point_cloud_4_sub_->registerCallback(&OctomapServer::insertCloudCallback, this);
+
+    tf_point_cloud_5_sub_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
+      point_cloud_5_sub_, *tf2_buffer_, world_frame_id_, 1, this->get_node_logging_interface(),
+      this->get_node_clock_interface(), 5s);
+    tf_point_cloud_5_sub_->registerCallback(&OctomapServer::insertCloudCallback, this);
   }
 
   octomap_binary_srv_ = create_service<OctomapSrv>(
@@ -451,9 +463,6 @@ void OctomapServer::insertCloudCallback(const PointCloud2::ConstSharedPtr cloud)
     return;
   }
 
-  Eigen::Matrix4f sensor_to_world =
-    tf2::transformToEigen(sensor_to_world_transform_stamped.transform).matrix().cast<float>();
-
   // set up filter for height range, also removes NANs:
   pcl::PassThrough<PCLPoint> pass_x;
   pass_x.setFilterFieldName("x");
@@ -488,14 +497,8 @@ void OctomapServer::insertCloudCallback(const PointCloud2::ConstSharedPtr cloud)
           "You need to set the base_frame_id or disable filter_ground.");
     }
 
-
-    Eigen::Matrix4f sensor_to_base =
-      tf2::transformToEigen(sensor_to_base_transform_stamped.transform).matrix().cast<float>();
-    Eigen::Matrix4f base_to_world =
-      tf2::transformToEigen(base_to_world_transform_stamped.transform).matrix().cast<float>();
-
     // transform pointcloud from sensor frame to fixed robot frame
-    pcl::transformPointCloud(pc, pc, sensor_to_base);
+    pcl_ros::transformPointCloud(pc, pc, sensor_to_base_transform_stamped);
     pass_x.setInputCloud(pc.makeShared());
     pass_x.filter(pc);
     pass_y.setInputCloud(pc.makeShared());
@@ -505,11 +508,11 @@ void OctomapServer::insertCloudCallback(const PointCloud2::ConstSharedPtr cloud)
     filterGroundPlane(pc, pc_ground, pc_nonground);
 
     // transform clouds to world frame for insertion
-    pcl::transformPointCloud(pc_ground, pc_ground, base_to_world);
-    pcl::transformPointCloud(pc_nonground, pc_nonground, base_to_world);
+    pcl_ros::transformPointCloud(pc_ground, pc_ground, base_to_world_transform_stamped);
+    pcl_ros::transformPointCloud(pc_nonground, pc_nonground, base_to_world_transform_stamped);
   } else {
     // directly transform to map frame:
-    pcl::transformPointCloud(pc, pc, sensor_to_world);
+    pcl_ros::transformPointCloud(pc, pc, sensor_to_world_transform_stamped);
 
     // just filter height range:
     pass_x.setInputCloud(pc.makeShared());
