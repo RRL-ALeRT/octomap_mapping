@@ -10,16 +10,16 @@ def generate_launch_description():
 
     octomap_server = Node(
         package='octomap_server',
-        executable='octomap_server_node',
+        executable='color_octomap_server_node',
         output='screen',
         parameters=[{
-            "resolution": 0.1,
+            "resolution": 0.05,
             "frame_id": "map",
             "base_frame_id": "base_link",
-            "sensor_model.max_range": 2.0,
+            "sensor_model.max_range": 3.0,
             "filter_ground" : True,
             "latch": False,
-            "exploration": False,
+            "exploration": True,
             "multiple_pointclouds": True,
             "use_sim_time": True,
         }],
@@ -28,6 +28,10 @@ def generate_launch_description():
             ("cloud_in_2", "color/points_left_flank"),
             ("cloud_in_3", "color/points_rear"),
             ("cloud_in_4", "color/points_right_flank"),
+            # ("cloud_in_5", "color/points_left_head"),
+            # ("cloud_in_6", "color/points_right_head"),
+            # ("octomap_full", "/navigation/octomap_full"),
+            # ("octomap_point_cloud_centers", "/navigation/octomap_point_cloud_centers")
         ],
     )
     node_list.append(octomap_server)
