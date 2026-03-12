@@ -8,6 +8,14 @@ from launch_ros.descriptions import ComposableNode
 def generate_launch_description():
     node_list = []
 
+    map_odom = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "0", "0", "0", "0", "vision", "map"],
+    )
+    node_list.append(map_odom)
+
     # realsenses_filtering_container = ComposableNodeContainer(
     #     name='realsense_pointcloud_filter',
     #     package='rclcpp_components',
@@ -102,19 +110,21 @@ def generate_launch_description():
     octomap_nav_server = Node(
         package='octomap_server',
         executable='octomap_server_node',
-        namespace='navigation',
+        # namespace='navigation',
         output='screen',
         parameters=[{
-            "resolution": 0.05,
+            "resolution": 0.2,
             "frame_id": "map",
             "base_frame_id": "body",
-            "sensor_model.max_range": 1.2,
+            "sensor_model.max_range": 2.5,
+            "sensor_model.min_range": 0.25,
+           # "point_cloud_max_z": 3.0,
+            "filter_ground" : True,
             "latch": False,
-            "exploration": False,
-            "multiple_pointclouds": False,
+            "exploration": False,   
         }],
         remappings=[
-            ("/navigation/cloud_in", "/spot_depth_points"),
+            ("/cloud_in", "/spot_depth_points"),
         ],
     )
     node_list.append(octomap_nav_server)
@@ -141,14 +151,14 @@ def generate_launch_description():
                                 ('camera_info', '/depth/frontright/camera_info'),
                                 ('points', '/spot_depth_points')]
                 ),
-                ComposableNode(
-                    package='depth_image_proc',
-                    plugin='depth_image_proc::PointCloudXyzNode',
-                    name='point_cloud_xyz_node',
-                    remappings=[('image_rect', '/depth/back/image'),
-                                ('camera_info', '/depth/back/camera_info'),
-                                ('points', '/spot_depth_points')]
-                ),
+               # ComposableNode(
+               #     package='depth_image_proc',
+               #     plugin='depth_image_proc::PointCloudXyzNode',
+               #     name='point_cloud_xyz_node',
+               #     remappings=[('image_rect', '/depth/back/image'),
+               #                 ('camera_info', '/depth/back/camera_info'),
+               #                 ('points', '/spot_depth_points')]
+               # ),
             ],
             output='screen',
         )
