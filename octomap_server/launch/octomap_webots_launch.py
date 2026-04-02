@@ -17,17 +17,19 @@ def generate_launch_description():
             "frame_id": "map",
             "base_frame_id": "base_link",
             "sensor_model.max_range": 2.0,
-            "filter_ground" : True,
+            "filter_ground" : False,
             "latch": False,
             "exploration": False,
             "multiple_pointclouds": True,
             "use_sim_time": True,
         }],
         remappings=[
-            ("cloud_in_1", "color/points_kinect"),
-            ("cloud_in_2", "color/points_left_flank"),
-            ("cloud_in_3", "color/points_rear"),
-            ("cloud_in_4", "color/points_right_flank"),
+            ("cloud_in_1", "/Spot/left_head_depth/point_cloud"),
+            ("cloud_in_2", "/Spot/right_head_depth/point_cloud"),
+            #("cloud_in_3", "/Spot/rear_depth/point_cloud"),
+            #("cloud_in_4", "/Spot/left_flank_depth/point_cloud"),
+            #("cloud_in_5", "/Spot/right_flank_depth/point_cloud"),
+            #("cloud_in_6", "/Spot/Velodyne_Puck/point_cloud")
         ],
     )
     node_list.append(octomap_server)
