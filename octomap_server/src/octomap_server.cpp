@@ -342,6 +342,10 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   local_map_radius_ = declare_parameter("local_map_radius", 3.0);
   timer_ = create_wall_timer(1000ms, std::bind(&OctomapServer::timer_callback, this));
 
+  // Robot footprint clearing - marks space around robot as FREE for navigation
+  clear_robot_footprint_ = declare_parameter("clear_robot_footprint", true);
+  robot_clear_radius_ = declare_parameter("robot_clear_radius", 1.0);
+
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
     this->get_node_base_interface(),
@@ -412,6 +416,8 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
   if (!openFile(filename)) {
     RCLCPP_WARN(get_logger(), "Could not open file %s", filename.c_str());
   }
+
+  reverse_occupancy_ = declare_parameter("reverse_occupancy", false);
 }
 
 void OctomapServer::timer_callback()
@@ -1506,9 +1512,54 @@ void OctomapServer::handlePreNodeTraversal(const rclcpp::Time & rostime)
 void OctomapServer::handlePostNodeTraversal([[maybe_unused]] const rclcpp::Time & rostime)
 {
   if (publish_2d_map_) {
+    clearRobotFootprint();  // Mark space around robot as FREE for navigation
     map_pub_->publish(gridmap_);
     map_pub_1m_->publish(gridmap_1m_);
     map_pub_2m_->publish(gridmap_2m_);
+  }
+}
+
+void OctomapServer::clearRobotFootprint()
+{
+  if (!clear_robot_footprint_ || gridmap_.data.empty()) return;
+
+  try {
+    geometry_msgs::msg::TransformStamped transform =
+      tf2_buffer_->lookupTransform(world_frame_id_, base_frame_id_,
+                                   tf2::TimePointZero, std::chrono::milliseconds(100));
+
+    double robot_x = transform.transform.translation.x;
+    double robot_y = transform.transform.translation.y;
+
+    // Convert robot position to map grid coordinates
+    int robot_mx = static_cast<int>((robot_x - gridmap_.info.origin.position.x) / gridmap_.info.resolution);
+    int robot_my = static_cast<int>((robot_y - gridmap_.info.origin.position.y) / gridmap_.info.resolution);
+
+    // Radius in grid cells
+    int radius_cells = static_cast<int>(robot_clear_radius_ / gridmap_.info.resolution);
+    int radius_sq = radius_cells * radius_cells;
+
+    // Clear circular bubble around robot - mark as FREE (0)
+    for (int dx = -radius_cells; dx <= radius_cells; dx++) {
+      for (int dy = -radius_cells; dy <= radius_cells; dy++) {
+        // Check if within circular radius
+        if (dx * dx + dy * dy <= radius_sq) {
+          int mx = robot_mx + dx;
+          int my = robot_my + dy;
+
+          // Bounds check
+          if (mx >= 0 && mx < static_cast<int>(gridmap_.info.width) &&
+              my >= 0 && my < static_cast<int>(gridmap_.info.height)) {
+            size_t idx = static_cast<size_t>(my) * gridmap_.info.width + static_cast<size_t>(mx);
+            gridmap_.data[idx] = 0;  // Mark as FREE
+            if (idx < gridmap_1m_.data.size()) gridmap_1m_.data[idx] = 0;
+            if (idx < gridmap_2m_.data.size()) gridmap_2m_.data[idx] = 0;
+          }
+        }
+      }
+    }
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_DEBUG(get_logger(), "Could not clear robot footprint: %s", ex.what());
   }
 }
 
@@ -1580,7 +1631,7 @@ void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
 {
   // Check if the point's height is within the desired limits
   double z_min = 0.4; // Modify this value to set the minimum height limit
-  double z_max = 1.8;  // Modify this value to set the maximum height limit
+  double z_max = 1.3;  // Modify this value to set the maximum height limit
   double z = it.getCoordinate().z();
   if (z < z_min || z > z_max) {
     // Point is outside the desired height limits, ignore it.
@@ -1759,6 +1810,7 @@ rcl_interfaces::msg::SetParametersResult OctomapServer::onParameter(
   update_param(parameters, "ground_filter_plane_distance", ground_filter_plane_distance_);
   update_param(parameters, "sensor_model.max_range", max_range_);
   update_param(parameters, "sensor_model.min_range", min_range_);
+  update_param(parameters, "reverse_occupancy", reverse_occupancy_);
   double sensor_model_min{get_parameter("sensor_model.min").as_double()};
   update_param(parameters, "sensor_model.min", sensor_model_min);
   octree_->setClampingThresMin(sensor_model_min);

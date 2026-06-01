@@ -132,23 +132,30 @@ def generate_launch_description():
 
     octomap_server = Node(
         package='octomap_server',
-        executable='color_octomap_server_node',
+        executable='octomap_server_node',
         output='screen',
         # namespace= 'color',
         parameters=[{
-            "resolution": 0.05,
+            "clear_robot_footprint": True,
+            'robot_clear_radius': 0.6,
+            "resolution": 0.01,
             "frame_id": "map",
             "base_frame_id": "body",
-            "sensor_model.max_range": 2.0,
+            "sensor_model.max_range": 3.0,
             "latch": False,
             "exploration": True,
             "multiple_pointclouds": False,
         }],
         remappings=[
             ("cloud_in", "/rs_color_points"),
+            ("octomap_full", "/navigation/octomap_full"),
+            ("octomap_full_local", "/navigation/octomap_full_local"),
+            ("octomap_binary_local", "/navigation/octomap_binary_local"),
+            ("octomap_point_cloud_centers", "/navigation/octomap_point_cloud_centers")
         ],
     )
     node_list.append(octomap_server)
+    
 
     return LaunchDescription(node_list)
 
