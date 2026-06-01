@@ -325,6 +325,7 @@ protected:
   double ground_filter_distance_;
   double ground_filter_angle_;
   double ground_filter_plane_distance_;
+  bool reverse_occupancy_;
 
   bool compress_map_;
 
@@ -344,6 +345,11 @@ protected:
 
   long int next_publish_time;
   double local_map_radius_;
+
+  // Robot footprint clearing for navigation
+  bool clear_robot_footprint_;
+  double robot_clear_radius_;
+  void clearRobotFootprint();
 };
 }  // namespace octomap_server
 
