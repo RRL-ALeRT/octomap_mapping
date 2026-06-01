@@ -458,6 +458,9 @@ void OctomapServer::timer_callback()
     const double dx = std::abs(robot_x - it.getX());
     const double dy = std::abs(robot_y - it.getY());
     if (dx + dy <= r) {
+      if (filter_island_ && island_voxels_cache_.count(it.getKey())) {
+        continue;
+      }
       local_tree.updateNode(it.getCoordinate(), it->getLogOdds());
     }
   }
@@ -842,6 +845,9 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
   IslandKeySet island_voxels;
   if (filter_island_) {
     island_voxels = getIslandVoxels();
+    island_voxels_cache_ = island_voxels;
+  } else {
+    island_voxels_cache_.clear();
   }
 
   // now, traverse all leafs in the tree:

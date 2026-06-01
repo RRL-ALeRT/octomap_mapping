@@ -320,6 +320,7 @@ protected:
   bool filter_speckles_;
   bool filter_island_;
   int filter_island_min_size_;
+  IslandKeySet island_voxels_cache_;
 
   bool filter_ground_plane_;
   double ground_filter_distance_;
