@@ -78,6 +78,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace octomap_server
@@ -153,8 +154,13 @@ protected:
   OnSetParametersCallbackHandle::SharedPtr set_param_res_;
   rcl_interfaces::msg::SetParametersResult onParameter(
     const std::vector<rclcpp::Parameter> & parameters);
-  void publishBinaryOctoMap(const rclcpp::Time & rostime) const;
-  void publishFullOctoMap(const rclcpp::Time & rostime) const;
+  using IslandKeySet = std::unordered_set<octomap::OcTreeKey, octomap::OcTreeKey::KeyHash>;
+  void publishBinaryOctoMap(
+    const rclcpp::Time & rostime,
+    const IslandKeySet & island_voxels = {}) const;
+  void publishFullOctoMap(
+    const rclcpp::Time & rostime,
+    const IslandKeySet & island_voxels = {}) const;
   virtual void publishAll(const rclcpp::Time & rostime);
 
   /**
@@ -181,6 +187,12 @@ protected:
   * @return
   */
   bool isSpeckleNode(const octomap::OcTreeKey & key) const;
+
+  /**
+   * @brief Compute the set of occupied voxel keys belonging to connected components
+   *        smaller than filter_island_min_size_ (26-connectivity BFS).
+   */
+  IslandKeySet getIslandVoxels() const;
 
   /// hook that is called before traversing all nodes
   virtual void handlePreNodeTraversal(const rclcpp::Time & rostime);
@@ -306,6 +318,8 @@ protected:
   double min_x_size_;
   double min_y_size_;
   bool filter_speckles_;
+  bool filter_island_;
+  int filter_island_min_size_;
 
   bool filter_ground_plane_;
   double ground_filter_distance_;

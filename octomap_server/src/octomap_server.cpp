@@ -31,7 +31,9 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <queue>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <chrono>
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -122,6 +124,23 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
     rcl_interfaces::msg::ParameterDescriptor filter_speckles_desc;
     filter_speckles_desc.description = "Filter speckle nodes (with no neighbors)";
     filter_speckles_ = declare_parameter("filter_speckles", false, filter_speckles_desc);
+  }
+  {
+    rcl_interfaces::msg::ParameterDescriptor filter_island_desc;
+    filter_island_desc.description =
+      "Filter isolated islands of occupied voxels smaller than filter_island_min_size";
+    filter_island_ = declare_parameter("filter_island", false, filter_island_desc);
+  }
+  {
+    rcl_interfaces::msg::ParameterDescriptor filter_island_min_size_desc;
+    filter_island_min_size_desc.description =
+      "Minimum connected-component size (voxels) to keep when filter_island is enabled";
+    rcl_interfaces::msg::IntegerRange filter_island_min_size_range;
+    filter_island_min_size_range.from_value = 1;
+    filter_island_min_size_range.to_value = 100000;
+    filter_island_min_size_desc.integer_range.push_back(filter_island_min_size_range);
+    filter_island_min_size_ =
+      static_cast<int>(declare_parameter("filter_island_min_size", 50, filter_island_min_size_desc));
   }
   {
     rcl_interfaces::msg::ParameterDescriptor filter_ground_plane_desc;
@@ -348,7 +367,7 @@ OctomapServer::OctomapServer(const rclcpp::NodeOptions & node_options)
     point_cloud_2_sub_.subscribe(this, "cloud_in_2", rmw_qos_profile_sensor_data);
     point_cloud_3_sub_.subscribe(this, "cloud_in_3", rmw_qos_profile_sensor_data);
     point_cloud_4_sub_.subscribe(this, "cloud_in_4", rmw_qos_profile_sensor_data);
-    // point_cloud_5_sub_.subscribe(this, "cloud_in_5", rmw_qos_profile_sensor_data);
+    point_cloud_5_sub_.subscribe(this, "cloud_in_5", rmw_qos_profile_sensor_data);
 
     tf_point_cloud_1_sub_ = std::make_shared<tf2_ros::MessageFilter<PointCloud2>>(
       point_cloud_1_sub_, *tf2_buffer_, world_frame_id_, 1, this->get_node_logging_interface(),
@@ -820,6 +839,11 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
   // call pre-traversal hook:
   handlePreNodeTraversal(rostime);
 
+  IslandKeySet island_voxels;
+  if (filter_island_) {
+    island_voxels = getIslandVoxels();
+  }
+
   // now, traverse all leafs in the tree:
   for (OcTreeT::iterator it = octree_->begin(max_tree_depth_),
     end = octree_->end(); it != end; ++it)
@@ -849,6 +873,11 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
           RCLCPP_DEBUG(get_logger(), "Ignoring single speckle at (%f,%f,%f)", x, y, z);
           continue;
         }  // else: current octree node is no speckle, send it out
+
+        // Ignore voxels belonging to small isolated islands:
+        if (filter_island_ && island_voxels.count(it.getKey())) {
+          continue;
+        }
 
         handleOccupiedNode(it);
         if (in_update_bbox) {
@@ -1013,13 +1042,13 @@ void OctomapServer::publishAll(const rclcpp::Time & rostime)
   if (publish_binary_map) {
     if (get_clock()->now().seconds() > next_publish_time)
     {
-      publishBinaryOctoMap(rostime);
+      publishBinaryOctoMap(rostime, island_voxels);
       next_publish_time += 5;
     }
   }
 
   if (publish_full_map) {
-    publishFullOctoMap(rostime);
+    publishFullOctoMap(rostime, island_voxels);
   }
   double total_elapsed = (rclcpp::Clock{}.now() - start_time).seconds();
   RCLCPP_DEBUG(get_logger(), "Map publishing in OctomapServer took %f sec", total_elapsed);
@@ -1126,28 +1155,66 @@ bool OctomapServer::resetSrv(
   return true;
 }
 
-void OctomapServer::publishBinaryOctoMap(const rclcpp::Time & rostime) const
+void OctomapServer::publishBinaryOctoMap(
+  const rclcpp::Time & rostime,
+  const IslandKeySet & island_voxels) const
 {
   Octomap map;
   map.header.frame_id = world_frame_id_;
   map.header.stamp = rostime;
-  if (octomap_msgs::binaryMapToMsg(*octree_, map)) {
-    binary_map_pub_->publish(map);
+
+  if (!island_voxels.empty()) {
+    OcTreeT filtered(octree_->getResolution());
+    for (OcTreeT::iterator it = octree_->begin(max_tree_depth_), end = octree_->end();
+         it != end; ++it)
+    {
+      if (!island_voxels.count(it.getKey())) {
+        filtered.updateNode(it.getCoordinate(), it->getLogOdds());
+      }
+    }
+    filtered.updateInnerOccupancy();
+    if (!octomap_msgs::binaryMapToMsg(filtered, map)) {
+      RCLCPP_ERROR(get_logger(), "Error serializing filtered binary OctoMap");
+      return;
+    }
   } else {
-    RCLCPP_ERROR(get_logger(), "Error serializing OctoMap");
+    if (!octomap_msgs::binaryMapToMsg(*octree_, map)) {
+      RCLCPP_ERROR(get_logger(), "Error serializing OctoMap");
+      return;
+    }
   }
+  binary_map_pub_->publish(map);
 }
 
-void OctomapServer::publishFullOctoMap(const rclcpp::Time & rostime) const
+void OctomapServer::publishFullOctoMap(
+  const rclcpp::Time & rostime,
+  const IslandKeySet & island_voxels) const
 {
   Octomap map;
   map.header.frame_id = world_frame_id_;
   map.header.stamp = rostime;
-  if (octomap_msgs::fullMapToMsg(*octree_, map)) {
-    full_map_pub_->publish(map);
+
+  if (!island_voxels.empty()) {
+    OcTreeT filtered(octree_->getResolution());
+    for (OcTreeT::iterator it = octree_->begin(max_tree_depth_), end = octree_->end();
+         it != end; ++it)
+    {
+      if (!island_voxels.count(it.getKey())) {
+        filtered.updateNode(it.getCoordinate(), it->getLogOdds());
+      }
+    }
+    filtered.updateInnerOccupancy();
+    if (!octomap_msgs::fullMapToMsg(filtered, map)) {
+      RCLCPP_ERROR(get_logger(), "Error serializing filtered full OctoMap");
+      return;
+    }
   } else {
-    RCLCPP_ERROR(get_logger(), "Error serializing OctoMap");
+    if (!octomap_msgs::fullMapToMsg(*octree_, map)) {
+      RCLCPP_ERROR(get_logger(), "Error serializing OctoMap");
+      return;
+    }
   }
+  full_map_pub_->publish(map);
 }
 
 void OctomapServer::filterGroundPlane(
@@ -1598,6 +1665,70 @@ bool OctomapServer::isSpeckleNode(const octomap::OcTreeKey & n_key) const
   return neighbor_found;
 }
 
+OctomapServer::IslandKeySet
+OctomapServer::getIslandVoxels() const
+{
+  using KeySet = IslandKeySet;
+
+  KeySet all_occupied;
+  for (OcTreeT::iterator it = octree_->begin(max_tree_depth_), end = octree_->end();
+       it != end; ++it)
+  {
+    if (octree_->isNodeOccupied(*it)) {
+      all_occupied.insert(it.getKey());
+    }
+  }
+
+  KeySet visited;
+  KeySet island_voxels;
+
+  for (const auto & seed : all_occupied) {
+    if (visited.count(seed)) {
+      continue;
+    }
+
+    std::vector<octomap::OcTreeKey> component;
+    std::queue<octomap::OcTreeKey> bfs;
+    bfs.push(seed);
+    visited.insert(seed);
+
+    while (!bfs.empty()) {
+      auto current = bfs.front();
+      bfs.pop();
+      component.push_back(current);
+
+      for (int dz = -1; dz <= 1; ++dz) {
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dx = -1; dx <= 1; ++dx) {
+            if (dx == 0 && dy == 0 && dz == 0) {
+              continue;
+            }
+            octomap::OcTreeKey nb(
+              current[0] + dx, current[1] + dy, current[2] + dz);
+            if (!visited.count(nb) && all_occupied.count(nb)) {
+              visited.insert(nb);
+              bfs.push(nb);
+            }
+          }
+        }
+      }
+    }
+
+    if (static_cast<int>(component.size()) < filter_island_min_size_) {
+      for (const auto & k : component) {
+        island_voxels.insert(k);
+      }
+    }
+  }
+
+  // RCLCPP_INFO(
+  //   get_logger(),
+  //   "[island_filter] occupied=%zu  island_voxels=%zu  threshold=%d",
+  //   all_occupied.size(), island_voxels.size(), filter_island_min_size_);
+
+  return island_voxels;
+}
+
 rcl_interfaces::msg::SetParametersResult OctomapServer::onParameter(
   const std::vector<rclcpp::Parameter> & parameters)
 {
@@ -1609,6 +1740,11 @@ rcl_interfaces::msg::SetParametersResult OctomapServer::onParameter(
   update_param(parameters, "occupancy_min_z", occupancy_min_z_);
   update_param(parameters, "occupancy_max_z", occupancy_max_z_);
   update_param(parameters, "filter_speckles", filter_speckles_);
+  update_param(parameters, "filter_island", filter_island_);
+  int64_t filter_island_min_size_tmp = filter_island_min_size_;
+  if (update_param(parameters, "filter_island_min_size", filter_island_min_size_tmp)) {
+    filter_island_min_size_ = static_cast<int>(filter_island_min_size_tmp);
+  }
   update_param(parameters, "filter_ground_plane", filter_ground_plane_);
   update_param(parameters, "compress_map", compress_map_);
   update_param(parameters, "incremental_2D_projection", incremental_2D_projection_);
