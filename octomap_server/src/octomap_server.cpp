@@ -1601,15 +1601,17 @@ void OctomapServer::handleFreeNodeInBBX(const OcTreeT::iterator & it)
 
 void OctomapServer::update2DMap(const OcTreeT::iterator & it, bool occupied)
 {
-  // update 2D map (occupied always overrides):
+  // Determine the map cost depending on the inversion flag
+  int occupied_value = reverse_occupancy_ ? 0 : 100;
+  int free_value     = reverse_occupancy_ ? 100 : 0;
+
   if (it.getDepth() == max_tree_depth_) {
     unsigned idx = mapIdx(it.getKey());
     if (occupied) {
-      gridmap_.data[mapIdx(it.getKey())] = 100;
+      gridmap_.data[idx] = occupied_value; // Occupied overrides
     } else if (gridmap_.data[idx] == -1) {
-      gridmap_.data[idx] = 0;
+      gridmap_.data[idx] = free_value;
     }
-
   } else {
     int int_size = 1 << (max_tree_depth_ - it.getDepth());
     octomap::OcTreeKey min_key = it.getIndexKey();
@@ -1618,9 +1620,9 @@ void OctomapServer::update2DMap(const OcTreeT::iterator & it, bool occupied)
       for (int dy = 0; dy < int_size; dy++) {
         unsigned idx = mapIdx(i, (min_key[1] + dy - padded_min_key_[1]) / multires_2d_scale_);
         if (occupied) {
-          gridmap_.data[idx] = 100;
+          gridmap_.data[idx] = occupied_value;
         } else if (gridmap_.data[idx] == -1) {
-          gridmap_.data[idx] = 0;
+          gridmap_.data[idx] = free_value;
         }
       }
     }
@@ -1629,24 +1631,24 @@ void OctomapServer::update2DMap(const OcTreeT::iterator & it, bool occupied)
 
 void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
 {
-  // Check if the point's height is within the desired limits
-  double z_min = 0.4; // Modify this value to set the minimum height limit
-  double z_max = 1.3;  // Modify this value to set the maximum height limit
+  double z_min = 0.1; 
+  double z_max = 1.3;  
   double z = it.getCoordinate().z();
+  
   if (z < z_min || z > z_max) {
-    // Point is outside the desired height limits, ignore it.
     return;
   }
 
-  // update 2D map (occupied always overrides):
+  int occupied_value = reverse_occupancy_ ? 0 : 100;
+  int free_value     = reverse_occupancy_ ? 100 : 0;
+
   if (it.getDepth() == max_tree_depth_) {
     unsigned idx = mapIdx(it.getKey());
     if (occupied) {
-      gridmap_1m_.data[mapIdx(it.getKey())] = 100;
+      gridmap_1m_.data[idx] = occupied_value;
     } else if (gridmap_1m_.data[idx] == -1) {
-      gridmap_1m_.data[idx] = 0;
+      gridmap_1m_.data[idx] = free_value;
     }
-
   } else {
     int int_size = 1 << (max_tree_depth_ - it.getDepth());
     octomap::OcTreeKey min_key = it.getIndexKey();
@@ -1655,9 +1657,9 @@ void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
       for (int dy = 0; dy < int_size; dy++) {
         unsigned idx = mapIdx(i, (min_key[1] + dy - padded_min_key_[1]) / multires_2d_scale_);
         if (occupied) {
-          gridmap_1m_.data[idx] = 100;
+          gridmap_1m_.data[idx] = occupied_value;
         } else if (gridmap_1m_.data[idx] == -1) {
-          gridmap_1m_.data[idx] = 0;
+          gridmap_1m_.data[idx] = free_value;
         }
       }
     }
@@ -1666,24 +1668,23 @@ void OctomapServer::update2DMap1m(const OcTreeT::iterator & it, bool occupied)
 
 void OctomapServer::update2DMap2m(const OcTreeT::iterator & it, bool occupied)
 {
-  // Check if the point's height is within the desired limits
-  double z_min = 1.8; // Modify this value to set the minimum height limit
-  double z_max = 2.2;  // Modify this value to set the maximum height limit
+  double z_min = 1.8; 
+  double z_max = 2.2;  
   double z = it.getCoordinate().z();
   if (z < z_min || z > z_max) {
-    // Point is outside the desired height limits, ignore it.
     return;
   }
 
-  // update 2D map (occupied always overrides):
+  int occupied_value = reverse_occupancy_ ? 0 : 100;
+  int free_value     = reverse_occupancy_ ? 100 : 0;
+
   if (it.getDepth() == max_tree_depth_) {
     unsigned idx = mapIdx(it.getKey());
     if (occupied) {
-      gridmap_2m_.data[mapIdx(it.getKey())] = 100;
+      gridmap_2m_.data[idx] = occupied_value;
     } else if (gridmap_2m_.data[idx] == -1) {
-      gridmap_2m_.data[idx] = 0;
+      gridmap_2m_.data[idx] = free_value;
     }
-
   } else {
     int int_size = 1 << (max_tree_depth_ - it.getDepth());
     octomap::OcTreeKey min_key = it.getIndexKey();
@@ -1692,9 +1693,9 @@ void OctomapServer::update2DMap2m(const OcTreeT::iterator & it, bool occupied)
       for (int dy = 0; dy < int_size; dy++) {
         unsigned idx = mapIdx(i, (min_key[1] + dy - padded_min_key_[1]) / multires_2d_scale_);
         if (occupied) {
-          gridmap_2m_.data[idx] = 100;
+          gridmap_2m_.data[idx] = occupied_value;
         } else if (gridmap_2m_.data[idx] == -1) {
-          gridmap_2m_.data[idx] = 0;
+          gridmap_2m_.data[idx] = free_value;
         }
       }
     }

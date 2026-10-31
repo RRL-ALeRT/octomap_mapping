@@ -14,14 +14,18 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             "resolution": 0.1,
+            "clear_robot_footprint": True,
+            "robot_clear_radius": 0.3,
+            "sensor_model.max_range":1.0,
+            "sensor_model.min_range": 0.5,
             "frame_id": "map",
             "base_frame_id": "base_link",
-            "sensor_model.max_range": 2.0,
             "filter_ground" : False,
-            "latch": False,
+            "latch": True,
             "exploration": False,
             "multiple_pointclouds": True,
             "use_sim_time": True,
+            "reverse_occupancy": True
         }],
         remappings=[
             ("cloud_in_1", "/Spot/left_head_depth/point_cloud"),
@@ -98,12 +102,12 @@ def generate_launch_description():
     )
     node_list.append(lfd)
 
-    # body_base_link = Node(
-    #     package="tf2_ros",
-    #     executable="static_transform_publisher",
-    #     output="screen",
-    #     arguments=["0", "0", "0", "0", "0", "0", "base_link", "body"],
-    # )
-    # node_list.append(body_base_link)
+    body_base_link = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        output="screen",
+        arguments=["0", "0", "0", "0", "0", "0", "base_link", "body"],
+    )
+    node_list.append(body_base_link)
 
     return LaunchDescription(node_list)
